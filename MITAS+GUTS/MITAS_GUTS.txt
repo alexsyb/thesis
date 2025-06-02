@@ -1,0 +1,576 @@
+# MITAS+GUTS 
+#
+# Version: 1
+# Date: 24.01.2023
+# Author: Alexandra Sybertz
+# Affiliation: Institute for Environmental Research (IFER)
+#              RWTH Aachen University, 52074 Aachen, Germany
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# Dependencies: morse, ggplot2, wesanderson
+#------------------------------------------------------------------------------
+
+#Modul 1: working directory/packages-------------------------------------
+
+#Modul 1.1: set working directory & R packages------------------------------------------------
+
+#Working directory
+WD<-""
+
+setwd(WD)
+
+#~~~~~~BASIC requirements~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+library("wesanderson")
+library("ggplot2")
+library("morse")
+
+
+#Modul 1.2: load databases------------------------------------------------
+compoundtab <- read.csv('MITAS_GUTS_Compound.csv', header=TRUE, sep=';', dec='.', na.strings='-9999',encoding = 'UTF-8')
+maintab <- read.csv('MITAS_GUTS_Main_data.csv', header=TRUE, sep=';', dec='.', na.strings='NA')
+croptab <- read.csv('MITAS_GUTS_Crop_data.csv', header=TRUE, sep=';', dec='.', na.strings='NA')
+climate<-read.csv('')
+
+#number of compounds
+numb=maintab[1,'numb_applications']
+
+#duration of simulation in days
+daysofyear=maintab[1,'days.of.year']
+
+#description from the maintab for the specific spray series
+description=maintab[1,'description']
+
+#degradation factor
+degfactor=maintab[1,'degradation.factor']
+
+#threshold for GUTS
+threshold=maintab[1,'threshold']
+
+#iteration = how often should the simulation be repeated?
+iteration=maintab[1,'iteration']
+
+#Calculation of mixture effect EA (Effect addition) or IA (Independent action)
+mixture_calc=maintab[1,'mixture_calc']
+
+#Choose an organism
+organism=maintab[1,'organism']
+
+#mcmc_size for morse calculation
+mcval=maintab[1,'mcmc_size']
+
+#toxicity test time
+testtime=maintab[,"testtime"]
+
+
+#Modul 1.3: read out crop data ------------------------------------------- 
+crop_ID=maintab[1,'crop_id']
+crop_name=croptab[crop_ID,'Crop']
+
+BBCH=c()
+for (i in 1:numb){
+   BBCH[i]=maintab[i,'BBCH']
+} 
+
+#Modul 1.4: read out application scenario---------------------------------
+
+ar=c()
+time=c()
+
+for (i in 1:numb){
+   ar[i]=maintab[i,''] 
+   time[i]=maintab[i,''] 
+}
+
+#Modul 1.5: define constant values----------------------------------------
+#Etrans=molar enthalpy of transformation [J/mol]
+Etrans=54000
+
+#Tref=reference temperature 
+Tref=293.15
+
+#R=molar gas constant [J/mol*K]
+R=8.314
+
+#mixing depth soil [m]
+d=maintab[1,'']
+
+#c1/c3=constants 
+c1=-0.07
+c3=100
+
+#Modul 1.6: compound information------------------------------------------
+
+comid=c()
+compound=c()
+
+for (i in 1:numb){
+   comid[i]=maintab[i,'']
+   compound[i]=as.character(compoundtab[comid[i],''])
+}
+
+#Modul 1.7: Missing ------------------------------------------------------
+
+chemcla=c()
+chemuse=c()
+degsoil=c()  
+lc50earth=c()  
+noecearth=c() 
+lc50folsomia=c() 
+
+for (i in 1:numb){
+   chemcla[i]=compoundtab[comid[i],'']
+   chemuse[i]=compoundtab[comid[i],'']
+   degsoil[i]=compoundtab[comid[i],''] 
+   
+   lc50earth[i]=compoundtab[comid[i],'']
+   noecearth[i]=compoundtab[comid[i],'']
+   lc50folsomia[i]=compoundtab[comid[i],'']
+}
+
+comchemclas=c(compoundtab$Chemical.class)
+comchemuse=c(compoundtab$Chemical.use)
+comT50soil=c(compoundtab$DT50soil..d.)
+commatrix=rbind(comchemclas,comchemuse,comT50soil)
+
+alllc50earth=c(compoundtab$LC50.earthworm..mg.ai.kg.dw.)
+allnoecearth=c(compoundtab$NOEC.earthworm..mg.ai.kg.dw.)
+
+same=c()
+averagelc50=c()
+averagenoec=c()
+
+
+#loop for DegT50soilref:
+for (i in 1:numb){
+   if (is.na(degsoil[i])){
+      same=commatrix[3,commatrix[1,]==chemcla[i]] 
+      degsoil[i]=mean(same,na.rm=TRUE)
+   }
+   if (is.na(degsoil[i])){
+      same=commatrix[3,commatrix[2,]==chemuse[i]]
+      degsoil[i]=mean(same,na.rm=TRUE)
+   }
+}
+
+#loop for LC50:
+for (i in 1:numb){
+  if (is.na(lc50earth[i])){
+    averagelc50=commatrix[4,commatrix[1,]==chemcla[i]] 
+    lc50earth[i]=mean(averagelc50,na.rm=TRUE)
+  }
+  if (is.na(lc50earth[i])){
+    averagelc50=commatrix[4,commatrix[2,]==chemuse[i]]
+    lc50earth[i]=mean(averagelc50,na.rm=TRUE)
+  }
+}
+
+#loop for NOEC:
+for (i in 1:numb){
+  if (is.na(noecearth[i])){
+    averagenoec=commatrix[5,commatrix[1,]==chemcla[i]] 
+    noecearth[i]=mean(averagenoec,na.rm=TRUE)
+  }
+  if (is.na(noecearth[i])){
+    averagenoec=commatrix[5,commatrix[2,]==chemuse[i]]
+    noecearth[i]=mean(averagenoec,na.rm=TRUE)
+  }
+}
+
+#Modul 1.8: determination of the vectors----------------------------------
+
+pec=c()
+etr=c()
+teracute=c()
+terchronic=c()
+toxchron=c()
+toxchronic=c()
+etrfolsomia=c()
+group=c()
+
+#Modul 1.9: monthly average temperature-----------------------------------
+
+temp=c()
+scenario=maintab[1,'']
+if (scenario==''){
+   temp=c(climate[ ,1])
+}
+
+temp=temp+273.15
+
+#Modul 1.10: determine CIF-value------------------------------------------
+
+ciftot=c()
+
+for (i in 1:numb){
+   ciftot[i]=(croptab[crop_ID,(BBCH[i]+2)])
+}
+
+ciftot=ciftot/100
+
+#-----NSDF(Net Soil Deposition Factor)-------------------
+nsdf=1-ciftot
+
+#Modul 1.11: PIEC (Predicted Initial Environmental concentration)---------
+
+
+if (scenario==''){
+   p=1.3
+}
+
+piec=c()
+
+depth=d*100
+
+#The equation is based on Boesten, J. J. T. I., Helweg, A., Businelli, M., 
+#Bergstrom, L., Schaefer, H., Delmas, A., ... & Yon, D. (1997). Soil persistence 
+#models and EU registration. Final Report of the Work of the Soil Modelling Work 
+#Group of FOCUS.
+for (i in 1:numb){
+   piec[i]=((ar[i]*1000)*nsdf[i])/(100*depth*p)
+}
+
+#Modul 1.12: disappearence rate constant----------------------------------
+
+ft=c()
+degsoilt50=c()
+
+
+for (i in 1:numb){
+  #temperature correction factor based on the Arrhenius eqation
+   ft[i]=exp((-Etrans/R)*((1/Tref)-(1/temp[time[i]]))) 
+   degsoilt50[i]=ft[i]*degsoil[i]
+}
+
+#Modul 1.13: PEC and acute/chronic ETR------------------------------------
+
+pecn=c()
+etrn=c()
+etrf=c()
+tern=c()
+terch=c()
+toxchron=c()
+etria=c()
+pecmatrix = matrix(c(0:0),nrow=numb,ncol=daysofyear)
+pecmatrix2 = matrix(c(0:0),nrow=daysofyear,ncol=numb)
+etrmatrix = matrix(c(0:0),nrow=numb,ncol=daysofyear)
+etrmatrix2 = matrix(c(0:0),nrow=daysofyear,ncol=numb)
+toxchronmatrix=matrix(c(0:0),nrow=daysofyear,ncol=numb)
+
+for(i in 1:daysofyear){
+   
+   dfactor=degfactor
+   
+   for (j in 1:numb){
+      if(i==time[j]){
+         pecn[j]=piec[j]
+      }else{
+         if (i<time[j]){
+            pecn[j]=0
+         }else{
+            pecn[j]=piec[j]*exp(-(log(2)/(degsoilt50[j]*dfactor))*(i-time[j]))
+         }
+      }
+   }
+   
+   
+   for (j in 1:numb){
+     etrn[j]=pecn[j]/(lc50earth[j])
+     toxchron[j]=pecn[j]/(noecearth[j])
+   }
+   
+   #Modul 1.14: result storage-----------------------------------------------
+
+   for (j in 1:numb){
+      pecmatrix[j,i] =pecn[j] 
+      pecmatrix2[i,j] =pecn[j] 
+      etrmatrix[j,i] =etrn[j]
+      etrmatrix2[i,j] =etrn[j]
+      toxchronmatrix[i,j] =toxchron[j]
+   }
+   
+   #total toxicities (sums):
+   pec[i]=sum(pecn) 
+   etr[i]=sum(etrn)
+   toxchronic[i]=sum(toxchron)
+}
+
+resultmatrix<-cbind(etr)
+colnames(resultmatrix)=c('concentration addition (acute)')
+write.csv2(resultmatrix,"Results.csv",quote=FALSE)
+
+rownames(etrmatrix)=compound
+write.csv2(etrmatrix,"ETR_values.csv",quote=FALSE)
+
+comid
+colnames(pecmatrix2)<-comid
+colnames(etrmatrix2)<-comid
+colnames(toxchronmatrix)<-comid
+
+df <- t(pecmatrix2)     
+pecnew <- by(df, INDICES=row.names(df), FUN=colSums) 
+pecnew <- as.data.frame(do.call(cbind,pecnew)) 
+
+write.table(pecmatrix2,"PEC.csv", sep=";",dec=".", col.names=TRUE, quote=FALSE, row.names=FALSE)
+write.table(pecnew,"PECsorted.csv", sep=";",dec=".", col.names=TRUE, quote=FALSE, row.names=FALSE)
+write.table(pecnew,"PECsorted2.csv", sep=";",dec=".", col.names=FALSE, quote=FALSE)
+
+newnumb<-ncol(pecnew) 
+
+df <- t(etrmatrix2)     
+etrnew <- by(df, INDICES=row.names(df), FUN=colSums) 
+etrnew <- as.data.frame(do.call(cbind,etrnew)) 
+
+df <- t(toxchronmatrix)     
+etrchronic <- by(df, INDICES=row.names(df), FUN=colSums) 
+etrchronic <- as.data.frame(do.call(cbind,etrchronic)) 
+
+newcompound <- read.csv('PECsorted.csv', header=FALSE, sep=';', dec='.', na.strings='NA')
+compoundnew<-c(newcompound[1,])
+compound2=c()
+
+
+for (i in 1:newnumb){
+   compound2[i]=as.character(compoundtab[as.integer(compoundnew[i]),''])
+}
+
+
+#Substance A:
+pecmorse1 <- matrix(c(0:0),nrow=daysofyear,ncol=100)
+
+for ( i in 1:depth[1]){
+   pecmorse1[,i]=noquote(pecnew[,1])
+}
+
+pecmorse1[1,1]=paste0("[",pecmorse1[1,1])
+pecmorse1[daysofyear,100]=paste0(0,"]")
+
+write.table(pecmorse1,"pecmorse1.csv",sep=";", col.names=FALSE,row.names = FALSE, quote=FALSE)
+write.table(pecmorse1,"pecmorse1.txt",sep=" ", col.names=FALSE,row.names = FALSE, quote=FALSE)
+
+#Substance B:
+pecmorse2 <- matrix(c(0:0),nrow=daysofyear,ncol=100)
+
+for ( i in 1:depth[1]){
+   pecmorse2[,i]=noquote(pecnew[,2])
+}
+
+pecmorse2[1,1]=paste0("[",pecmorse2[1,1])
+pecmorse2[daysofyear,100]=paste0(0,"]")
+
+write.table(pecmorse2,"pecmorse2.csv",sep=";", col.names=FALSE,row.names = FALSE, quote=FALSE)
+write.table(pecmorse2,"pecmorse2.txt",sep=" ", col.names=FALSE,row.names = FALSE, quote=FALSE)
+
+
+PlotPec<-ggplot(data=as.data.frame(pecnew),aes(x=1:daysofyear))+
+  geom_line(aes(y=pecnew[,1], colour=compound2[1]))+ 
+  geom_line(aes(y=pecnew[,2], colour=compound2[2]))+ 
+  scale_color_manual(values=wes_palette("Darjeeling1", length(compound2), type = c("continuous")))+
+  theme(legend.key.size=unit(0.2, "cm"),legend.position="bottom",legend.text = element_text(size = 8),legend.title=element_blank())+
+  ggtitle(paste0('PEC_',description))+
+  theme(panel.background = element_rect(fill='white'),panel.grid.major = element_blank(),panel.grid.minor = element_blank())+
+  theme(axis.line.x = element_line(color='black', size = 0.5),axis.line.y = element_line(color='black', size = 0.5))+
+  labs(x='time [days]',y='PEC [mg/kg soil]')
+
+ggsave(paste0('PEcsoil_',organism,'_',description,'.png'), width=10,height=5)
+
+etrgesamt<-cbind(etrnew,etr)
+PlotETRacute<-ggplot(data=as.data.frame(etrgesamt),aes(x=1:daysofyear))+
+  geom_line(aes(y=etrgesamt[,1], colour=compound2[1]))+ 
+  geom_line(aes(y=etrgesamt[,2], colour=compound2[2]))+ 
+  geom_line(aes(y=etrgesamt[,4]), colour='black')+
+  scale_color_manual(values=wes_palette("Darjeeling1", length(compound2), type = c("continuous")))+
+  theme(legend.key.size=unit(0.2, "cm"),legend.position="bottom",legend.text = element_text(size = 8),legend.title=element_blank())+
+  ggtitle(paste0('ETRacute_Eisenia_',description))+
+  theme(panel.background = element_rect(fill='white'),panel.grid.major = element_blank(),panel.grid.minor = element_blank())+
+  theme(axis.line.x = element_line(color='black', size = 0.5),axis.line.y = element_line(color='black', size = 0.5))+
+  labs(x='time [days]',y='ETR')+
+  scale_y_continuous(limits = c(0,1))
+
+ggsave(paste0('ETRacute_',description,'.png'), width=10,height=5)
+
+#Substance A:
+ sdat1 <- survData(read.csv(file=paste0(organism,'_',compound2[1],'.csv'), sep=";",header=T))
+ 
+if (threshold == 'IT'){
+
+ fit1 <- survFit(sdat1, model_type = 'IT')
+}else{
+
+ fit1 <- survFit(sdat1, model_type = 'SD')  
+}
+ 
+ 
+ plot(sdat1)
+ 
+ plotDoseResponse(sdat1, target.time = testtime[1], addlegend = TRUE)
+
+ summary(sdat1)
+ ppc(fit1)
+ 
+ plot(fit1, log.scale = TRUE, style = "generic", adddata = TRUE, addlegend = TRUE)
+ ggsave(paste0(compound2[1],'_fit.png'), width=10,height=5)
+ 
+ LCx_1 <- LCx(fit1, X = 50)
+ plot(LCx_1)
+ ggsave(paste0(compound2[1],'_LC50.png'), width=10,height=5)
+ 
+ #Substance B----------------
+ if (newnumb>1){
+   
+ sdat2 <- survData(read.csv(file=paste0(organism,'_',compound2[2],'.csv'), sep=";",header=T))
+ 
+if (threshold == 'IT'){
+ 
+ fit2 <- survFit(sdat2, model_type = 'IT')
+}else{
+ 
+ fit2 <- survFit(sdat2, model_type = 'SD')
+}
+ #summary(fit2)
+ plot(sdat2)
+ ggsave(paste0(compound2[2],'_Data.png'), width=10,height=5)
+ 
+ plotDoseResponse(sdat2, target.time = testtime[2], addlegend = TRUE)
+
+ summary(sdat2)
+ ppc(fit2)
+
+ plot(fit2, log.scale = TRUE, style = "generic", adddata = TRUE, addlegend = TRUE)
+ ggsave(paste0(compound2[2],'_fit.png'), width=10,height=5)
+ 
+ LCx_2 <- LCx(fit2, X = 50)
+ plot(LCx_2)
+ ggsave(paste0(compound2[2],'_LC50.png'), width=10,height=5)
+ }
+ 
+ 
+ setwd(paste0(WD,'Results'))
+
+#Substance A:
+ predict_expo_pattern1<-predict_ode(object=fit1, data_predict=data_expo_pattern1, mcmc_size=mcval, hb_value=FALSE,hb_valueFORCED=0) 
+ write.csv2((predict_expo_pattern1$df_quantile),paste0('1predicted_expo_pattern_',compound2[1],'.csv'))
+
+ survival1<-matrix(c(0:0),nrow=numb,ncol=daysofyear)
+ survival1<-predict_expo_pattern1$df_quantile
+
+ time1<-survival1$time
+ concentration1<-survival1$conc
+ survive1<-survival1$q50
+ mortality1<-1-survive1
+
+ df1<-data.frame(time1, concentration1, survive1, mortality1)
+
+ Pmortality<-ggplot(df1,aes(x=time1))+
+   geom_line(aes(y=mortality1), colour='red')+ 
+   ggtitle(paste0(compound2[1],'_mortality /',threshold,'crop:',crop_name))+
+   theme(panel.background = element_rect(fill='white'),panel.grid.major = element_blank(),panel.grid.minor = element_blank())+
+   theme(axis.line.x = element_line(color='black', size = 0.5),axis.line.y = element_line(color='black', size = 0.5))+
+   labs(x='time [days]',y='mortality probability')+
+   scale_y_continuous(limits = c(0,1))
+
+ ggsave(paste0(1,compound2[1],threshold,'_Mortality_',organism,'.png'), width=10,height=5)
+
+
+#Substance B:
+ if (newnumb>1){
+ predict_expo_pattern2<-predict_ode(object=fit2, data_predict=data_expo_pattern2, mcmc_size=mcval, hb_value=FALSE,hb_valueFORCED=0) 
+ write.csv2((predict_expo_pattern2$df_quantile),paste0('2predicted_expo_pattern_',compound2[2],'.csv'))
+
+ survival2<-matrix(c(0:0),nrow=numb,ncol=daysofyear)
+ survival2<-predict_expo_pattern2$df_quantile
+
+ time2<-survival2$time
+ concentration2<-survival2$conc
+ survive2<-survival2$q50
+ mortality2<-1-survive2
+
+ 
+ df2<-data.frame(time2, concentration2, survive2, mortality2)
+
+ Pmortality<-ggplot(df2,aes(x=time2))+
+   geom_line(aes(y=mortality2), colour='red')+ 
+   ggtitle(paste0(compound2[2],'_mortality',threshold,'/crop:',crop_name))+
+   theme(panel.background = element_rect(fill='white'),panel.grid.major = element_blank(),panel.grid.minor = element_blank())+
+   theme(axis.line.x = element_line(color='black', size = 0.5),axis.line.y = element_line(color='black', size = 0.5))+
+   labs(x='time [days]',y='mortality probability')
+
+ ggsave(paste0(2,compound2[2],threshold,'_Mortality_',organism,'.png'), width=10,height=5)
+
+ }
+ 
+
+ allmortalitymatrix = matrix(c(0:0),nrow=length(time1),ncol=newnumb)
+ 
+
+   for (i in 1:length(time1)){
+     allmortalitymatrix[i,1]= mortality1[i]
+     
+     if (newnumb>1){
+       allmortalitymatrix[i,2]= mortality2[i]
+     }
+
+   }
+ 
+ 
+
+#Mixture:
+ 
+ time=time1
+ length(time)
+ ia<-c()
+ ca<-c()
+
+ 
+ for (i in 1:(length(time))){
+   
+#The equations are based on Hadrup N, Taxvig C, Pedersen M, Nellemann C, Hass U, 
+#et al. (2013) Concentration Addition, Independent Action and Generalized Concentration 
+#Addition Models for Mixture Effect Prediction of Sex Hormone Synthesis In Vitro. 
+#PLOS ONE 8(8): e70490. https://doi.org/10.1371/journal.pone.0070490
+   
+   if (newnumb>1){
+     ia[i]=1-((1-allmortalitymatrix[i,1])*(1-allmortalitymatrix[i,2]))
+     ca[i]= sum(allmortalitymatrix[i,])
+
+   }
+   
+   if (newnumb>2){
+     ia[i]=1-((1-allmortalitymatrix[i,1])*(1-allmortalitymatrix[i,2])*(1-allmortalitymatrix[i,3]))
+     ca[i]= sum(allmortalitymatrix[i,])
+
+   }
+   
+ }
+ 
+ if (newnumb>1){mixturetox<-data.frame(time,ia,ca,iaworst,caworst,iabest,cabest,mortality1,mortality2)}
+ 
+ Pmixtix<-ggplot(mixturetox,aes(x=time))+
+    geom_line(aes(y=ia), colour='black')+ 
+    ggtitle(paste0('IA_MixTox_mortality /crop:',crop_name,threshold))+
+   theme(panel.background = element_rect(fill='white'),panel.grid.major = element_blank(),panel.grid.minor = element_blank())+
+   theme(axis.line.x = element_line(color='black', size = 0.5),axis.line.y = element_line(color='black', size = 0.5))+
+    labs(x='time [days]',y='mortality probability')
+ 
+ ggsave(paste0('IA_MixTox_Mortality_',organism,'_',description,'_',threshold,'.png'), width=10,height=5)
+ 
+ Pmixtixca<-ggplot(mixturetox,aes(x=time))+
+    geom_line(aes(y=ca), colour='black')+ 
+    ggtitle(paste0('CA_MixTox_mortality /crop:',crop_name,threshold))+
+   theme(panel.background = element_rect(fill='white'),panel.grid.major = element_blank(),panel.grid.minor = element_blank())+
+   theme(axis.line.x = element_line(color='black', size = 0.5),axis.line.y = element_line(color='black', size = 0.5))+
+    labs(x='time [days]',y='mortality probability')
+ 
+ ggsave(paste0('CA_MixTox_Mortality_',organism,'_',description,'_',threshold,'.png'), width=10,height=5)
+ 
+ 
