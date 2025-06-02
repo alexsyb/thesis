@@ -11,6 +11,7 @@ This model requires four additional CSV files:
     - File "MIXCOP_Crop_data" includes details about the cultivated crops and their BBCH growth stages.
     - File "Climatetab" includes temperature data for the chosen Scenario
 
+In addition, toxicity data files are required for all substances included.
 
 Related publication:
 Sybertz, A., R. Ottermanns, and M. Roß-Nickoll, MIXCOP - Implementation of a model to assess 
