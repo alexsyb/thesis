@@ -161,6 +161,11 @@
 
  depth=d*100
 
+#The equation is based on Boesten, J. J. T. I., Helweg, A., Businelli, M., 
+#Bergstrom, L., Schaefer, H., Delmas, A., ... & Yon, D. (1997). Soil persistence 
+#models and EU registration. Final Report of the Work of the Soil Modelling Work 
+#Group of FOCUS.
+
  for (i in 1:numb){
    piec[i]=((ar[i]*1000)*nsdf[i])/(100*depth*p)
  }
