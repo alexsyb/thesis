@@ -1,0 +1,13 @@
+READ ME:
+
+MITAS+GUTS: Simulation of the potential time-dependent effects on single soil organisms
+
+R Code to execute the MITAS+GUTS model
+
+This model requires four additional CSV files:
+    - File "MITAS_GUTS_Main_data" contains all information relevant for the simulation.
+    - File "MITAS_GUTS_Compound" provides physicochemical data on the applied pesticides.
+    - File "MITAS_GUTS_Crop_data" includes details about the cultivated crops and their BBCH growth stages.
+    - File "Climate" includes temperature data for the chosen Scenario
+
+In addition, toxicity data files are required for all substances included.
